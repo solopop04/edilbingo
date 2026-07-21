@@ -83,7 +83,7 @@ def get_one_line_winning_calls():
   return winning_turn
 
 
-# 1. /start ትዕዛዝ እና ዋናው ሜኑ
+# 1. /start ትዕዛዝ እና ዋናው ሜኑ (ከ 10 እና 50 ብር ገደብ ማረጋገጫ ጋር)
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
   user_id = message.from_user.id
@@ -98,18 +98,22 @@ async def cmd_start(message: types.Message):
   winnings_bal = user_db[user_id]["winnings"]
   total_balance = deposit_bal + winnings_bal
 
+  # የጨዋታ ሁነታዎችን በባላንስ ገደብ መወሰን (የዘውትር: 10 ብር, BigWin: 50 ብር)
+  daily_mode = "active" if total_balance >= 10 else "spectator"
+  bigwin_mode = "active" if total_balance >= 50 else "spectator"
+
   keyboard = InlineKeyboardMarkup(
       inline_keyboard=[
           [
               InlineKeyboardButton(
                   text="🎮 የዘውትር ጨዋታ (ባለ 10 ብር)",
-                  web_app=WebAppInfo(url=f"{WEB_APP_URL}/game?type=daily"),
+                  web_app=WebAppInfo(url=f"{WEB_APP_URL}/game?type=daily&mode={daily_mode}"),
               )
           ],
           [
               InlineKeyboardButton(
                   text="🏆 BigWin ጨዋታ (ባለ 50 ብር - በሳምንት 2 ቀን)",
-                  web_app=WebAppInfo(url=f"{WEB_APP_URL}/game?type=bigwin"),
+                  web_app=WebAppInfo(url=f"{WEB_APP_URL}/game?type=bigwin&mode={bigwin_mode}"),
               )
           ],
           [
@@ -134,11 +138,11 @@ async def cmd_start(message: types.Message):
       f" {deposit_bal} ETB | 🏆 ያሸነፉት: {winnings_bal} ETB)\n\n"
   )
 
-  if total_balance <= 0:
+  if total_balance < 10:
     welcome_text += (
-        "⚠️ <i>ማስታወሻ:</i> አካውንትዎ ላይ በቂ ገንዘብ ስለሌለ፣ በጨዋታዎቹ ላይ በነፃ መሳተፍ"
-        " አይችሉም፤ ነገር ግን የሚጠሩትን ቁጥሮች <b>Spectator (መከታተል) ብቻ</b>"
-        " ይችላሉ። ለመጫወት <b>Deposit</b> ያድርጉ!"
+        "⚠️ <i>ማስታወሻ:</i> አካውንትዎ ላይ ከ 10 ብር በታች ስለሆነ የዘውትር ጨዋታን በንቃት"
+        " መጫወት አይችሉም (BigWin ደግሞ 50 ብር ይጠይቃል)፤ ነገር ግን እንደ <b>Spectator"
+        " (ተመልካች)</b> ቁጥሮችን እና አሸናፊዎችን መከታተል ይችላሉ። ለመጫወት <b>Deposit</b> ያድርጉ!"
     )
   else:
     welcome_text += "✨ ከታች ካሉት የጨዋታ አይነቶች አንዱን በመምረጥ መጫወት ይችላሉ፦"
@@ -157,8 +161,8 @@ async def show_profile(callback: types.CallbackQuery):
 
   status_text = (
       "ፈጣን ተጫዋች (Active Player)"
-      if total_balance > 0
-      else "ተመልካች ብቻ (Spectator - ባላንስ የለውም)"
+      if total_balance >= 10
+      else "ተመልካች ብቻ (Spectator - ባላንስ ከ 10 ብር በታች ነው)"
   )
 
   keyboard = InlineKeyboardMarkup(inline_keyboard=[[
@@ -352,18 +356,22 @@ async def back_to_menu(callback: types.CallbackQuery):
   user_id = callback.from_user.id
   user_data = user_db.get(user_id, {"deposit": 0.0, "winnings": 0.0})
   total_balance = user_data["deposit"] + user_data["winnings"]
+
+  daily_mode = "active" if total_balance >= 10 else "spectator"
+  bigwin_mode = "active" if total_balance >= 50 else "spectator"
+
   keyboard = InlineKeyboardMarkup(
       inline_keyboard=[
           [
               InlineKeyboardButton(
                   text="🎮 የዘውትር ጨዋታ (ባለ 10 ብር)",
-                  web_app=WebAppInfo(url=f"{WEB_APP_URL}/game?type=daily"),
+                  web_app=WebAppInfo(url=f"{WEB_APP_URL}/game?type=daily&mode={daily_mode}"),
               )
           ],
           [
               InlineKeyboardButton(
                   text="🏆 BigWin ጨዋታ (ባለ 50 ብር - በሳምንት 2 ቀን)",
-                  web_app=WebAppInfo(url=f"{WEB_APP_URL}/game?type=bigwin"),
+                  web_app=WebAppInfo(url=f"{WEB_APP_URL}/game?type=bigwin&mode={bigwin_mode}"),
               )
           ],
           [
@@ -389,10 +397,13 @@ async def back_to_menu(callback: types.CallbackQuery):
 
 
 # ==========================================
-# 5. የ MINI APP WEB SERVER & FULL BINGO LOGIC (የተሟላ 3 ባህሪያት)
+# 5. የ MINI APP WEB SERVER & FULL BINGO LOGIC (Spectator Mode Integration)
 # ==========================================
 @app.get("/game", response_class=HTMLResponse)
-async def bingo_game_page(type: str = "daily"):
+async def bingo_game_page(type: str = "daily", mode: str = "active"):
+  is_spectator = (mode == "spectator")
+  min_req = "50 ብር" if type == "bigwin" else "10 ብር"
+  
   return f"""
     <!DOCTYPE html>
     <html lang="am">
@@ -407,6 +418,7 @@ async def bingo_game_page(type: str = "daily"):
             .mute-btn {{ background: #ef4444; border: none; color: white; padding: 8px 12px; border-radius: 5px; cursor: pointer; }}
             .timer {{ font-size: 16px; color: #f59e0b; margin: 5px 0; font-weight: bold; }}
             .current-call {{ font-size: 22px; color: #22c55e; margin: 10px 0; font-weight: bold; background: #1e293b; padding: 8px; border-radius: 6px; }}
+            .spectator-banner {{ background: #b91c1c; color: white; padding: 10px; border-radius: 6px; margin-bottom: 10px; font-weight: bold; font-size: 14px; display: {'block' if is_spectator else 'none'}; }}
             
             /* የቢንጎ ሰሌዳ አምዶች ዲዛይን (B:አረንጓዴ, I:ቀይ, N:ወሃ ሰማያዊ, G:ሰማያዊ, O:ብርቱካናማ) */
             .bingo-cell-b {{ background-color: #27ae60 !important; color: white; }}
@@ -429,21 +441,31 @@ async def bingo_game_page(type: str = "daily"):
             <button class="mute-btn" id="muteBtn" onclick="toggleMute()">🔊 ድምፅ (ON)</button>
         </div>
 
+        <div class="spectator-banner" id="spectatorBanner">
+            ⚠️ የስፔክቴተር ሁነታ (Spectator Mode): ባላንስዎ ከ {min_req} በታች ስለሆነ መጫወት አይችሉም። ቁጥሮችን እና አሸናፊዎችን ብቻ መከታተል ይችላሉ!
+        </div>
+
         <div class="timer" id="timerBox"></div>
         <div class="current-call" id="currentCallBox">የተጠራ ቁጥር: ገና አልጀመረም</div>
         
-        <p>ካርድዎ (ቁጥር ሲጠራ ይንኩ):</p>
+        <p id="cardStatusLabel">ካርድዎ (ቁጥር ሲጠራ ይንኩ):</p>
 
         <div class="card" id="bingoCard">
             <!-- ColumnHeaders & Cells generated via JS -->
         </div>
 
-        <button class="bingo-btn" onclick="checkBingoWin()">BINGO (አሸነፍኩ!)</button>
+        <button class="bingo-btn" id="bingoBtn" onclick="checkBingoWin()">BINGO (አሸነፍኩ!)</button>
 
         <script>
             let isMuted = false;
             let calledNumbers = new Set();
-            let cardMatrix = []; // 5x5 matrix for win validation
+            let cardMatrix = []; 
+            let isSpectator = {'true' if is_spectator else 'false'};
+
+            if (isSpectator) {{
+                document.getElementById('bingoBtn').style.display = 'none';
+                document.getElementById('cardStatusLabel').innerText = "የተመልካች ሰሌዳ (ቁጥሮች ሲጠሩ ማየት ይችላሉ):";
+            }}
 
             function toggleMute() {{
                 isMuted = !isMuted;
@@ -476,19 +498,17 @@ async def bingo_game_page(type: str = "daily"):
                 return arr.sort((a,b) => a - b);
             }}
 
-            // 1. ትክክለኛ የቢንጎ ካርድ ማመንጨት (Columns B, I, N, G, O + FREE center)
             function generateCard() {{
                 let colB = getRandomUnique(1, 15, 5);
                 let colI = getRandomUnique(16, 30, 5);
                 let colN = getRandomUnique(31, 45, 4);
-                colN.splice(2, 0, 'FREE'); // መሀል ላይ FREE
+                colN.splice(2, 0, 'FREE');
                 let colG = getRandomUnique(46, 60, 5);
                 let colO = getRandomUnique(61, 75, 5);
 
                 let container = document.getElementById('bingoCard');
                 container.innerHTML = '';
 
-                // Header letters (B I N G O)
                 let letters = ['B', 'I', 'N', 'G', 'O'];
                 let headerColors = ['#27ae60', '#c0392b', '#5dade2', '#2980b9', '#d35400'];
                 for(let i=0; i<5; i++) {{
@@ -510,13 +530,17 @@ async def bingo_game_page(type: str = "daily"):
                         cell.innerText = val;
 
                         let isFree = (val === 'FREE');
-                        rowState.push(isFree); // FREE በአውቶማቲክ የተያዘ ነው
+                        rowState.push(isFree);
 
                         if (isFree) {{
                             cell.classList.add('marked');
                         }} else {{
                             let cellObj = {{ row: r, col: c, val: val, marked: false, element: cell }};
                             cell.onclick = function() {{
+                                if (isSpectator) {{
+                                    alert("⚠️ እርስዎ በስፔክቴተር (ተመልካች) ሁነታ ላይ ነዎት፤ ካርድ መምረጥ አይችሉም!");
+                                    return;
+                                }}
                                 if (calledNumbers.has(val)) {{
                                     cellObj.marked = !cellObj.marked;
                                     cell.classList.toggle('marked');
@@ -534,7 +558,6 @@ async def bingo_game_page(type: str = "daily"):
 
             generateCard();
 
-            // 2. ተለዋዋጭ የቁጥር ጥሪ સિስተም (Dynamic Calling Simulation)
             let allNumbers = getRandomUnique(1, 75, 75);
             let callIndex = 0;
 
@@ -552,10 +575,9 @@ async def bingo_game_page(type: str = "daily"):
                     }} else {{
                         clearInterval(callInterval);
                     }}
-                }}, 3500); // በየ 3.5 ሰከንድ አንድ ቁጥር ይጠራል
+                }}, 3500);
             }}
 
-            // BigWin ቆጠራ ሰዓት
             let timeLeft = "{'60' if type=='bigwin' else '5'}";
             let timerInterval = setInterval(() => {{
                 if (timeLeft > 0) {{
@@ -568,26 +590,22 @@ async def bingo_game_page(type: str = "daily"):
                 }}
             }}, 1000);
 
-            // 3. ትክክለኛ የመስመር ማረጋገጫ ሎጂክ (Line Validation: Horizontal, Vertical, Diagonal)
             function checkBingoWin() {{
-                // cardMatrix ውስጥ ካሉት ረድፎች፣ አምዶች እና ዲያጎናሎች ቢያንስ አንዱ ሙሉ በሙሉ marked መሆኑን ማረጋገጥ
+                if (isSpectator) return;
                 let win = false;
 
-                // 1. አግድም መስመሮች (Horizontal)
                 for (let r = 0; r < 5; r++) {{
                     if (cardMatrix[r][0] && cardMatrix[r][1] && cardMatrix[r][2] && cardMatrix[r][3] && cardMatrix[r][4]) {{
                         win = true;
                     }}
                 }}
 
-                // 2. ቋሚ መስመሮች (Vertical)
                 for (let c = 0; c < 5; c++) {{
                     if (cardMatrix[0][c] && cardMatrix[1][c] && cardMatrix[2][c] && cardMatrix[3][c] && cardMatrix[4][c]) {{
                         win = true;
                     }}
                 }}
 
-                // 3. ዲያጎናል መስመሮች (Diagonal)
                 if (cardMatrix[0][0] && cardMatrix[1][1] && cardMatrix[2][2] && cardMatrix[3][3] && cardMatrix[4][4]) {{
                     win = true;
                 }}
@@ -615,11 +633,9 @@ async def run_bot():
 if __name__ == "__main__":
   import threading
 
-  # FastAPI ሰርቨር በ background thread ማስኬድ
   server_thread = threading.Thread(
       target=lambda: uvicorn.run(app, host="127.0.0.1", port=8000), daemon=True
   )
   server_thread.start()
 
-  # የቴሌግራም ቦት ፖሊንግ ማስጀመር
   asyncio.run(run_bot())
