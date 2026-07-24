@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="am">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EdilBingo Game</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; background: #0f172a; color: #fff; text-align: center; margin: 0; padding: 10px; }
+        .header { display: flex; justify-content: space-between; align-items: center; padding: 10px; background: #1e293b; border-radius: 8px; margin-bottom: 10px; }
+        .mute-btn { background: #ef4444; border: none; color: white; padding: 8px 12px; border-radius: 5px; cursor: pointer; }
+        .timer { font-size: 16px; color: #f59e0b; margin: 5px 0; font-weight: bold; }
+        .spectator-banner { background: #b91c1c; color: white; padding: 10px; border-radius: 6px; margin-bottom: 10px; font-weight: bold; font-size: 14px; display: none; }
+        .pool-info { background: #334155; padding: 10px; border-radius: 8px; margin-bottom: 15px; font-size: 15px; color: #38bdf8; font-weight: bold; }
+
+        .cards-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; max-width: 400px; margin: 0 auto; max-height: 350px; overflow-y: auto; padding: 5px; background: #1e293b; border-radius: 8px; }
+        .card-select-item { background: #334155; padding: 12px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; transition: 0.2s; }
+        .card-select-item.selected { background: #059669; border: 2px solid #facc15; }
+
+        .bingo-btn { background: #3b82f6; color: white; border: none; padding: 12px 25px; font-size: 16px; border-radius: 8px; cursor: pointer; margin-top: 15px; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h3 id="gameTitleHeader">EdilBingo</h3>
+        <button class="mute-btn" id="muteBtn" onclick="toggleMute()">🔊 ድምፅ (ON)</button>
+    </div>
+
+    <div class="spectator-banner" id="spectatorBanner">
+        ⚠️ የስፔክቴተር ሁነታ (Spectator Mode): ባላንስዎ በቂ ባለመሆኑ መጫወት አይችሉም።
+    </div>
+
+    <div class="pool-info" id="poolInfoBox">
+        🎯 ከጠቅላላ <span id="totalCardsPool">450</span> ካርዶች ውስጥ እስከ **2 ካርዶች** ይምረጡ፡
+    </div>
+
+    <div class="timer" id="timerBox">ጨዋታው ሊጀመር ነው...</div>
+    
+    <div class="cards-grid" id="cardsGridContainer"></div>
+
+    <button class="bingo-btn" id="bingoBtn" onclick="confirmCardSelection()">ምርጫውን አረጋግጥ (Lock Cards)</button>
+
+    <script>
+        let isMuted = false;
+        let isSpectator = {{IS_SPECTATOR}};
+        let gameType = "{{GAME_TITLE}}";
+        
+        let totalCardsCount = (gameType.includes("bigwin") || gameType.includes("BigWin")) ? 900 : 450;
+        document.getElementById('totalCardsPool').innerText = totalCardsCount;
+        document.getElementById('gameTitleHeader').innerText = "EdilBingo - " + (totalCardsCount === 900 ? "BigWin" : "የዘውትር ጨዋታ");
+
+        let selectedCards = new Set();
+        let container = document.getElementById('cardsGridContainer');
+
+        if (isSpectator) {
+            document.getElementById('spectatorBanner').style.display = 'block';
+            document.getElementById('bingoBtn').style.display = 'none';
+        }
+
+        function toggleMute() {
+            isMuted = !isMuted;
+            document.getElementById('muteBtn').innerText = isMuted ? "🔇 ድምፅ (OFF)" : "🔊 ድምፅ (ON)";
+        }
+
+        function renderCardSelectionPool() {
+            container.innerHTML = '';
+            for (let i = 1; i <= totalCardsCount; i++) {
+                let cardBox = document.createElement('div');
+                cardBox.className = 'card-select-item';
+                cardBox.innerText = "ካርድ #" + i;
+                
+                cardBox.onclick = function() {
+                    if (isSpectator) {
+                        alert("⚠️ እርስዎ ተመልካች (Spectator) ነዎት!");
+                        return;
+                    }
+
+                    if (selectedCards.has(i)) {
+                        selectedCards.delete(i);
+                        cardBox.classList.remove('selected');
+                    } else {
+                        if (selectedCards.size >= 2) {
+                            alert("⚠️ በአንድ ዙር ከፍተኛው እስከ 2 ካርዶች ብቻ መምረጥ ይቻላል!");
+                            return;
+                        }
+                        selectedCards.add(i);
+                        cardBox.classList.add('selected');
+                    }
+                };
+                container.appendChild(cardBox);
+            }
+        }
+
+        renderCardSelectionPool();
+
+        function confirmCardSelection() {
+            if (selectedCards.size === 0) {
+                alert("❌ እባክዎ ቢያንስ 1 ካርድ ይምረጡ!");
+                return;
+            }
+            let chosenArr = Array.from(selectedCards).join(", ");
+            alert("✅ የተሳካ ምርጫ! የመረጧቸው ካርዶች: " + chosenArr);
+        }
+
+        let timeLeft = 10;
+        let timerInterval = setInterval(() => {
+            if (timeLeft > 0) {
+                document.getElementById('timerBox').innerText = "የካርድ መምረጫ ቀሪ ሰዓት: " + timeLeft + " ሰከንድ";
+                timeLeft--;
+            } else {
+                clearInterval(timerInterval);
+                document.getElementById('timerBox').innerText = "🎮 ጨዋታው ተጀምሯል!";
+            }
+        }, 1000);
+    </script>
+</body>
+</html>
